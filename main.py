@@ -117,26 +117,21 @@ async def send_message(request: Request):
     phone = json_data.get('phone') if json_data.get(
         'phone') else WHATSAPP_RECEIVER_NUMBER
 
+    data = {
+        "to": phone,
+        "messaging_product": "whatsapp",
+    }
+
     if not message:
-        # If there's no message, send a template
-        data = {
-            "to": phone,
-            "type": "template",
-            "messaging_product": "whatsapp",
-            "template": {
-                "name": "hello_world",
-                "language": {"code": "en_US"}
-            }
+        data["type"] = "template"
+        data["template"] = {
+            "name": "hello_world",
+            "language": {"code": "en_US"}
         }
     else:
-        # If there's a message, send it
-        data = {
-            "to": phone,
-            "type": "text",
-            "text": {
-                "body": message
-            },
-            "messaging_product": "whatsapp"
+        data["type"] = "text"
+        data["text"] = {
+            "body": message
         }
 
     url = f"https://graph.facebook.com/{WHATSAPP_API_VERSION}/{WHATSAPP_SENDER_NUMBER}/messages"
@@ -147,7 +142,17 @@ async def send_message(request: Request):
     response = requests.post(url, json=data, headers=headers)
     json_data = response.json()
 
-    result = messages_collection.insert_one(json_data)
-    json_data["_id"] = str(result.inserted_id)
+    json_data["messages"][0] = data
 
-    return json_data
+    result = messages_collection.insert_one(json_data)
+
+    inserted_id = result.inserted_id
+    timestamp = inserted_id.generation_time
+    timestamp_datetime = timestamp.timestamp()
+
+    json_data["_id"] = str(inserted_id)
+    json_data["messages"][0]["timestamps"] = timestamp_datetime
+
+    str_data = json.dumps(json_data, default=str)
+
+    await manager.broadcast(str_data)
