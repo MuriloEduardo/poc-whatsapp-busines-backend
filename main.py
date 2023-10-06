@@ -1,13 +1,10 @@
 import os
 import json
 import pymongo
-from bson import json_util
-from fastapi import FastAPI, WebSocket
 from dotenv import load_dotenv
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-import threading
-import queue
+from fastapi import FastAPI, WebSocket, Request, HTTPException, WebSocketDisconnect
 
 load_dotenv()
 
@@ -22,70 +19,72 @@ collection = db['messages']
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-data_queue = queue.Queue()
 
-# Variável global para armazenar a conexão WebSocket
-websocket_connection = None
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+
+manager = ConnectionManager()
 
 
 @app.websocket('/ws')
 async def ws(websocket: WebSocket):
-    global websocket_connection
-    await websocket.accept()
+    await manager.connect(websocket)
 
-    # Armazene a conexão WebSocket na variável global
-    websocket_connection = websocket
+    try:
+        data = [json.loads(json.dumps(document, default=str))
+                for document in collection.find()]
+        data = json.dumps(data)
 
-    # Obtenha os dados do banco de dados imediatamente após a aceitação da conexão
-    data = [json.loads(json_util.dumps(document, default=str))  # Converte ObjectId para string
-            for document in collection.find()]
+        await manager.broadcast(data)
 
-    # Envie os dados para o cliente WebSocket
-    await websocket.send_text(json.dumps(data))
+        while True:
+            data = await websocket.receive_text()
+            # await manager.send_personal_message(f"You wrote: {data}", websocket)
 
-    # Aguarde mensagens do cliente WebSocket e realize qualquer ação necessária
-    while True:
-        received = await websocket.receive_text()
-        # Faça algo com a mensagem recebida, se necessário
-
-# Função para enviar dados para o WebSocket
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 
-def send_data_to_websocket():
-    global websocket_connection
-    while True:
-        if websocket_connection:
-            data = data_queue.get()
-            websocket_connection.send_text(json.dumps(data))
+@app.get('/whatsapp-business/webhook')
+def verify_facebook_webhook(request: Request):
+    challenge = request.query_params.get('hub.challenge')
+    verify_token = request.query_params.get('hub.verify_token')
+
+    if not verify_token == VERIFY_TOKEN:
+        raise HTTPException(
+            status_code=403, detail="Invalid verification token")
+
+    return int(challenge)
 
 
-# Inicialize a função em uma thread separada
-websocket_thread = threading.Thread(target=send_data_to_websocket)
-websocket_thread.start()
+@app.post('/whatsapp-business/webhook')
+async def receive_whatsapp_webhook(request: Request):
+    json_data = await request.json()
 
+    result = collection.insert_one(json_data)
+    new_object = {"_id": str(result.inserted_id), **json_data}
 
-@app.get('/webhook')
-async def verify_facebook_webhook(request: dict):
-    if request.get('hub.verify_token') == VERIFY_TOKEN:
-        return request.get('hub.challenge')
-    return 'Invalid verification token', 403
+    str_data = json.dumps(new_object, default=str)
 
-
-@app.post('/webhook')
-async def receive_whatsapp_webhook(data: dict):
-    # Insira os dados no banco de dados
-    collection.insert_one(data)
-
-    # Coloque os dados na fila para serem enviados para o WebSocket
-    data_queue.put(data)
-
-    return 'OK'
+    await manager.broadcast(str_data)
 
 
 @app.get('/politica-de-privacidade', response_class=HTMLResponse)
 async def politica_de_privacidade():
     return open("static/politica_de_privacidade.html").read()
-
-if __name__ == '__main__':
-    import uvicorn
-    uvicorn.run(app, port=5000)

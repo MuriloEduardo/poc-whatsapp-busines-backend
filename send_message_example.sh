@@ -2,7 +2,7 @@
 
 source .env
 
-curl -i -X POST 'https://graph.facebook.com/v17.0/109628212037229/messages' \
-  -H "Authorization: Bearer $WHATSAPP_TOKEN" \
+curl -i -X POST "https://graph.facebook.com/v18.0/$WHATSAPP_SENDER_NUMBER/messages" \
   -H 'Content-Type: application/json' \
-  -d "{ \"messaging_product\": \"whatsapp\", \"to\": \"$WHATSAPP_NUMBER\", \"type\": \"template\", \"template\": { \"name\": \"hello_world\", \"language\": { \"code\": \"en_US\" } } }"
+  -H "Authorization: Bearer $WHATSAPP_TOKEN" \
+  -d "{ \"messaging_product\": \"whatsapp\", \"to\": \"$WHATSAPP_RECEIVER_NUMBER\", \"type\": \"template\", \"template\": { \"name\": \"hello_world\", \"language\": { \"code\": \"en_US\" } } }"
