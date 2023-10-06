@@ -97,9 +97,9 @@ async def receive_whatsapp_webhook(request: Request):
     json_data = await request.json()
 
     result = messages_collection.insert_one(json_data)
-    new_object = {"_id": str(result.inserted_id), **json_data}
+    json_data["_id"] = str(result.inserted_id)
 
-    str_data = json.dumps(new_object, default=str)
+    str_data = json.dumps(json_data, default=str)
 
     await manager.broadcast(str_data)
 
@@ -145,5 +145,9 @@ async def send_message(request: Request):
         'Authorization': f'Bearer {WHATSAPP_TOKEN}'
     }
     response = requests.post(url, json=data, headers=headers)
+    json_data = response.json()
 
-    return response.json()
+    result = messages_collection.insert_one(json_data)
+    json_data["_id"] = str(result.inserted_id)
+
+    return json_data
