@@ -149,19 +149,19 @@ async def send_message(request: Request):
         'Authorization': f'Bearer {WHATSAPP_TOKEN}'
     }
     response = requests.post(url, json=data, headers=headers)
-    json_data = response.json()
+    response_json_data = response.json()
 
-    json_data["messages"][0] = data
+    response_json_data["messages"][0]["data"] = data
 
-    result = messages_collection.insert_one(json_data)
+    result = messages_collection.insert_one(response_json_data)
 
     inserted_id = result.inserted_id
     timestamp = inserted_id.generation_time
     timestamp_datetime = timestamp.timestamp()
 
-    json_data["_id"] = str(inserted_id)
-    json_data["messages"][0]["timestamps"] = timestamp_datetime
+    response_json_data["_id"] = str(inserted_id)
+    response_json_data["messages"][0]["timestamps"] = timestamp_datetime
 
-    str_data = json.dumps(json_data, default=str)
+    str_data = json.dumps(response_json_data, default=str)
 
     await manager.broadcast(str_data)
