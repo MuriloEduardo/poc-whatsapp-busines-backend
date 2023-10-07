@@ -40,7 +40,10 @@ async def receive_whatsapp_webhook(
     result = messages_collection.insert_one(json_data)
     json_data["_id"] = str(result.inserted_id)
 
-    await manager.broadcast(json_data)
+    await manager.broadcast({
+        "type": "whatsapp",
+        "data": json_data
+    })
 
 
 @router.post('/send-message')
@@ -98,4 +101,7 @@ async def send_message(
     response_json_data["_id"] = str(inserted_id)
     response_json_data["messages"][0]["timestamps"] = timestamp_datetime
 
-    await manager.broadcast(response_json_data)
+    await manager.broadcast({
+        "type": "whatsapp",
+        "data": response_json_data
+    })
