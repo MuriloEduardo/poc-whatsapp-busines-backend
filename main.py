@@ -1,14 +1,17 @@
 import ConnectionManager
 from fastapi import FastAPI
+from dotenv import load_dotenv
 from pymongo import MongoClient
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from dependencies import get_manager, get_mongo
 from services.openia import get_openai_response
+from dependencies import get_manager, get_mongo
 from routes import whatsapp_routes, openai_routes
 from fastapi.middleware.cors import CORSMiddleware
 from services.whatsapp import mount_whatsapp_messages
 from fastapi import Depends, WebSocket, WebSocketDisconnect
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -54,7 +57,7 @@ async def ws(websocket: WebSocket, manager: ConnectionManager = Depends(get_mana
             data = await websocket.receive_text()
 
             if data == "openai":
-                response = await get_openai_response(data)
+                response = get_openai_response(data)
 
                 await manager.send_personal_message({
                     "type": "openai",
