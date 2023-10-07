@@ -1,3 +1,4 @@
+import json
 from fastapi import WebSocket
 
 class ConnectionManager:
@@ -12,7 +13,8 @@ class ConnectionManager:
         self.active_connections.remove(websocket)
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
+        json_message = json.dumps(message)
+        await websocket.send_text(json_message)
 
     async def broadcast(self, message: str):
         for connection in self.active_connections:

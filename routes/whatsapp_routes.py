@@ -1,8 +1,8 @@
 import os
 import json
 import requests
+import ConnectionManager
 from pymongo import MongoClient
-from ConnectionManager import ConnectionManager
 from dependencies import get_manager, get_mongo
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Request, HTTPException
 
@@ -100,39 +100,3 @@ async def send_message(
     str_data = json.dumps(response_json_data, default=str)
 
     await manager.broadcast(str_data)
-
-
-@router.websocket('/ws')
-async def ws(
-    websocket: WebSocket,
-    mongo_client: MongoClient = Depends(get_mongo),
-    manager: ConnectionManager = Depends(get_manager)
-):
-    whatsapp_messages = mongo_client['whatsapp_messages']
-    messages_collection = whatsapp_messages['messages']
-
-    await manager.connect(websocket)
-
-    try:
-        data = []
-
-        for document in messages_collection.find():
-            document_data = json.loads(json.dumps(document, default=str))
-            if "messages" in document_data:
-                for message in document_data["messages"]:
-                    timestamp = document["_id"].generation_time
-                    timestamp_datetime = timestamp.timestamp()
-                    message["timestamps"] = timestamp_datetime
-
-            data.append(document_data)
-
-        data = json.dumps(data)
-
-        await manager.broadcast(data)
-
-        while True:
-            data = await websocket.receive_text()
-            # await manager.send_personal_message(f"You wrote: {data}", websocket)
-
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
